@@ -1,0 +1,3 @@
+import { chapters } from '../data/chapters';
+type Props={active:number; onSelect:(n:number)=>void};
+export default function ChapterNav({active,onSelect}:Props){return <nav className="chapter-nav" aria-label="Explore chapters"><span className="nav-caption">FIELD NOTES</span>{chapters.map((c,i)=><button key={c.id} className={i===active?'nav-item selected':'nav-item'} onClick={()=>onSelect(i)} aria-current={i===active?'step':undefined} aria-label={`Go to chapter ${i+1}: ${c.nav}`}><span className="nav-num">0{i+1}</span><span className="nav-name">{c.nav}</span><i /></button>)}</nav>}
