@@ -1,0 +1,19 @@
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import type { Stop } from '../data/cameraStops';
+export type Mode='journey'|'orbit'|'explore';
+export class CameraController {
+ private pos=new THREE.Vector3(0,3,15); private aim=new THREE.Vector3(); private keys=new Set<string>(); private drag=false; private lastX=0; private lastY=0; private touchY=0; private cleanups:(()=>void)[]=[];
+ constructor(private camera:THREE.PerspectiveCamera,private canvas:HTMLCanvasElement,private orbit:OrbitControls,private onStep:(delta:number)=>void){
+ const wheel=(e:WheelEvent)=>{if(this.mode==='journey'){e.preventDefault();this.onStep(e.deltaY>0?1:-1)}}; canvas.addEventListener('wheel',wheel,{passive:false});this.cleanups.push(()=>canvas.removeEventListener('wheel',wheel));
+ const down=(e:PointerEvent)=>{if(this.mode==='journey'&&e.pointerType==='touch'){this.touchY=e.clientY;canvas.setPointerCapture(e.pointerId);return}if(this.mode==='explore'){this.drag=true;this.lastX=e.clientX;this.lastY=e.clientY;canvas.setPointerCapture(e.pointerId)}};
+ const move=(e:PointerEvent)=>{if(this.mode==='journey'&&e.pointerType==='touch'&&this.touchY){const d=e.clientY-this.touchY;if(Math.abs(d)>55){this.onStep(d<0?1:-1);this.touchY=0}return}if(this.drag&&this.mode==='explore'){const dx=e.clientX-this.lastX,dy=e.clientY-this.lastY;this.lastX=e.clientX;this.lastY=e.clientY;this.camera.rotation.order='YXZ';this.camera.rotation.y-=dx*.004;this.camera.rotation.x-=dy*.004;this.camera.rotation.x=THREE.MathUtils.clamp(this.camera.rotation.x,-1.45,1.45)}};
+ const up=()=>{this.drag=false;this.touchY=0}; canvas.addEventListener('pointerdown',down);canvas.addEventListener('pointermove',move);canvas.addEventListener('pointerup',up);canvas.addEventListener('pointercancel',up);this.cleanups.push(()=>{canvas.removeEventListener('pointerdown',down);canvas.removeEventListener('pointermove',move);canvas.removeEventListener('pointerup',up);canvas.removeEventListener('pointercancel',up)});
+ const key=(e:KeyboardEvent)=>{if(this.mode!=='explore')return;const k=e.key.toLowerCase();if('wasdqe'.includes(k)){this.keys.add(k);e.preventDefault()}};const keyup=(e:KeyboardEvent)=>this.keys.delete(e.key.toLowerCase());window.addEventListener('keydown',key);window.addEventListener('keyup',keyup);this.cleanups.push(()=>{window.removeEventListener('keydown',key);window.removeEventListener('keyup',keyup)});
+ } mode:Mode='journey'; reduced=false;
+ setMode(m:Mode){this.mode=m;this.orbit.enabled=m==='orbit';this.canvas.style.cursor=m==='explore'?'grab':'default';if(m==='journey')this.orbit.enabled=false}
+ go(stop:Stop){this.pos.fromArray(stop.position);this.aim.fromArray(stop.target);if(this.reduced){this.camera.position.copy(this.pos);this.camera.lookAt(this.aim)}}
+ capture(id:string):Stop{const p=this.camera.position.toArray() as [number,number,number];const d=new THREE.Vector3();this.camera.getWorldDirection(d);const target=this.camera.position.clone().add(d.multiplyScalar(5)).toArray() as [number,number,number];return{id,position:p,target}}
+ update(dt:number){if(this.mode==='journey'){const a=this.reduced?1:1-Math.exp(-3.2*dt);this.camera.position.lerp(this.pos,a);const current=new THREE.Vector3();this.camera.getWorldDirection(current);const desired=this.aim.clone().sub(this.camera.position).normalize();current.lerp(desired,a).normalize();this.camera.lookAt(this.camera.position.clone().add(current));}else if(this.mode==='explore'){const v=new THREE.Vector3();if(this.keys.has('w'))v.z-=1;if(this.keys.has('s'))v.z+=1;if(this.keys.has('a'))v.x-=1;if(this.keys.has('d'))v.x+=1;if(this.keys.has('q'))v.y-=1;if(this.keys.has('e'))v.y+=1;if(v.lengthSq())this.camera.position.add(v.normalize().applyQuaternion(this.camera.quaternion).multiplyScalar(Math.min(dt,.05)*5))}else this.orbit.update()}
+ dispose(){this.cleanups.forEach(f=>f())}
+}
